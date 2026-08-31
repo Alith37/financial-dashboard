@@ -1,3 +1,5 @@
+import os
+
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -7,10 +9,16 @@ from schemas import UserBudgetSchema, UserCredentials
 
 app = FastAPI(title="PetroTech Financial Dashboard API")
 
-# Configure CORS for Vite dev server (Port 5173)
+# Configure CORS for local development and the deployed frontend.
+frontend_origins = [
+    origin.strip()
+    for origin in os.getenv("FRONTEND_ORIGINS", "").split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=frontend_origins,
+    allow_origin_regex=r"https://financial-dashboard(?:-[a-z0-9-]+)?\.vercel\.app|https?://(?:localhost|127\.0\.0\.1)(?::\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

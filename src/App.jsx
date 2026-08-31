@@ -1,5 +1,14 @@
 import React, { useState, useEffect, useRef } from "react";
-import { getBudget, saveBudget, login, register, logout } from "./api.js";
+import {
+  getBudget,
+  saveBudget,
+  login,
+  register,
+  logout,
+  getSessionTimeoutMs,
+  isSessionExpired,
+  refreshSessionExpiry,
+} from "./api.js";
 import BudgetPlanner from "./components/BudgetPlanner.jsx";
 import SavingsTracker from "./components/SavingsTracker.jsx";
 import InvestmentSimulator from "./components/InvestmentSimulator.jsx";
@@ -12,9 +21,19 @@ import {
 import { calculateBudgetSummary } from "./utils/financial.js";
 
 export default function App() {
-  const [userId, setUserId] = useState(
-    localStorage.getItem("financial_dashboard_user"),
-  );
+  const [userId, setUserId] = useState(() => {
+    const currentUser = localStorage.getItem("financial_dashboard_user");
+    const tokenExists = Boolean(
+      localStorage.getItem("financial_dashboard_token"),
+    );
+
+    if (tokenExists && isSessionExpired()) {
+      logout();
+      return null;
+    }
+
+    return currentUser;
+  });
   const [authMode, setAuthMode] = useState("login");
   const [credentials, setCredentials] = useState({
     username: "",
@@ -28,7 +47,86 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [loadedUserId, setLoadedUserId] = useState(null);
   const [saveStatus, setSaveStatus] = useState("");
+  const [sessionCountdown, setSessionCountdown] = useState(0);
   const hasLoadedData = useRef(false);
+  const inactivityTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    if (!userId) {
+      hasLoadedData.current = false;
+      setSessionCountdown(0);
+      return undefined;
+    }
+
+    const updateSessionCountdown = () => {
+      const expiryTime = Number(
+        localStorage.getItem("financial_dashboard_session_expires_at"),
+      );
+
+      if (!expiryTime) {
+        setSessionCountdown(0);
+        return;
+      }
+
+      const remainingMs = Math.max(0, expiryTime - Date.now());
+      const remainingSeconds = Math.ceil(remainingMs / 1000);
+      setSessionCountdown(remainingSeconds);
+
+      if (remainingMs <= 0) {
+        logout();
+        setUserId(null);
+        setCredentials({ username: "", password: "" });
+        setAuthError(
+          "Your session expired due to inactivity. Please sign in again.",
+        );
+      }
+    };
+
+    const clearAndSetSessionTimeout = () => {
+      if (inactivityTimeoutRef.current) {
+        window.clearTimeout(inactivityTimeoutRef.current);
+      }
+
+      refreshSessionExpiry();
+      updateSessionCountdown();
+      inactivityTimeoutRef.current = window.setTimeout(() => {
+        logout();
+        setUserId(null);
+        setCredentials({ username: "", password: "" });
+        setAuthError(
+          "Your session expired due to inactivity. Please sign in again.",
+        );
+      }, getSessionTimeoutMs());
+    };
+
+    clearAndSetSessionTimeout();
+    const countdownIntervalId = window.setInterval(
+      updateSessionCountdown,
+      1000,
+    );
+
+    const handleActivity = () => {
+      clearAndSetSessionTimeout();
+    };
+
+    window.addEventListener("mousemove", handleActivity);
+    window.addEventListener("keydown", handleActivity);
+    window.addEventListener("click", handleActivity);
+    window.addEventListener("scroll", handleActivity, { passive: true });
+    window.addEventListener("touchstart", handleActivity, { passive: true });
+
+    return () => {
+      if (inactivityTimeoutRef.current) {
+        window.clearTimeout(inactivityTimeoutRef.current);
+      }
+      window.clearInterval(countdownIntervalId);
+      window.removeEventListener("mousemove", handleActivity);
+      window.removeEventListener("keydown", handleActivity);
+      window.removeEventListener("click", handleActivity);
+      window.removeEventListener("scroll", handleActivity);
+      window.removeEventListener("touchstart", handleActivity);
+    };
+  }, [userId]);
 
   useEffect(() => {
     if (!userId) {
@@ -204,10 +302,20 @@ export default function App() {
   };
 
   const dashboardSummary = calculateBudgetSummary(monthlyIncome, expenses);
+  const sessionMinutes = Math.floor(sessionCountdown / 60);
+  const sessionSeconds = sessionCountdown % 60;
+  const isSessionWarning = sessionCountdown > 0 && sessionCountdown <= 60;
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 p-6">
       <div className="max-w-7xl mx-auto space-y-8">
+        {isSessionWarning && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 shadow-lg shadow-amber-900/20">
+            Warning: your session will expire in {sessionMinutes}:
+            {String(sessionSeconds).padStart(2, "0")}. Please continue
+            interacting or sign out now.
+          </div>
+        )}
         <header className="flex flex-col sm:flex-row justify-between items-center bg-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl gap-4">
           <div>
             <h1 className="text-2xl font-bold text-white">
@@ -220,6 +328,14 @@ export default function App() {
                 className={`text-sm ${saveStatus.includes("Failed") ? "text-red-400" : "text-emerald-400"}`}
               >
                 {saveStatus}
+              </span>
+            )}
+            {sessionCountdown > 0 && (
+              <span
+                className={`text-sm font-medium ${isSessionWarning ? "text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-1 rounded-full" : "text-slate-300"}`}
+              >
+                Session expires in {sessionMinutes}:
+                {String(sessionSeconds).padStart(2, "0")}
               </span>
             )}
             <button
