@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Local configuration and generated runtime data
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+mongodb-data/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

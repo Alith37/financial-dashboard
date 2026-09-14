@@ -18,6 +18,7 @@ import {
   DEFAULT_GOALS,
   DEFAULT_INVESTMENT,
 } from "./constants/defaults.js";
+import { getAuthErrorMessage } from "./authErrors.js";
 import { calculateBudgetSummary } from "./utils/financial.js";
 
 export default function App() {
@@ -192,11 +193,7 @@ export default function App() {
       setUserId(credentials.username);
       setCredentials({ username: "", password: "" });
     } catch (err) {
-      const detail = err.response?.data?.detail;
-      const message = Array.isArray(detail)
-        ? detail.map((item) => item.msg).join(" ")
-        : detail;
-      setAuthError(message ?? "Authentication failed.");
+      setAuthError(getAuthErrorMessage(err, "Authentication failed."));
     }
   };
 
