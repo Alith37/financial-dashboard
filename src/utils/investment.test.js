@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { calculateInvestmentProjection } from "./investment.js";
-import { calculateBudgetSummary } from "./financial.js";
+import {
+  calculateBudgetSummary,
+  calculateFinancialHealth,
+} from "./financial.js";
 
 test("investment projection includes compound growth and contributions", () => {
   const result = calculateInvestmentProjection({
@@ -35,4 +38,16 @@ test("budget summary explains remaining cash flow versus the 50/30/20 target", (
   assert.equal(summary.cashFlowPercentOfIncome, 51.1);
   assert.ok(summary.savingsTargetStatus.includes("above"));
   assert.equal(summary.savingsTargetGap, 15550);
+});
+
+test("financial health score rewards cash flow and savings progress", () => {
+  const summary = calculateBudgetSummary(5000, [
+    { id: 1, title: "Rent", amount: 1800, category: "Needs" },
+    { id: 2, title: "Savings", amount: 1000, category: "Savings" },
+  ]);
+
+  const health = calculateFinancialHealth(summary);
+
+  assert.equal(health.score, 78);
+  assert.equal(health.label, "Good momentum");
 });

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { Sparkles } from "lucide-react";
 import {
   getBudget,
   saveBudget,
@@ -19,7 +20,10 @@ import {
   DEFAULT_INVESTMENT,
 } from "./constants/defaults.js";
 import { getAuthErrorMessage } from "./authErrors.js";
-import { calculateBudgetSummary } from "./utils/financial.js";
+import {
+  calculateBudgetSummary,
+  calculateFinancialHealth,
+} from "./utils/financial.js";
 
 export default function App() {
   const [userId, setUserId] = useState(() => {
@@ -41,6 +45,7 @@ export default function App() {
     password: "",
   });
   const [authError, setAuthError] = useState("");
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [monthlyIncome, setMonthlyIncome] = useState(DEFAULT_MONTHLY_INCOME);
   const [expenses, setExpenses] = useState(DEFAULT_EXPENSES);
   const [goals, setGoals] = useState(DEFAULT_GOALS);
@@ -48,6 +53,7 @@ export default function App() {
   const [isSaving, setIsSaving] = useState(false);
   const [loadedUserId, setLoadedUserId] = useState(null);
   const [saveStatus, setSaveStatus] = useState("");
+  const [lastSavedAt, setLastSavedAt] = useState(null);
   const [sessionCountdown, setSessionCountdown] = useState(0);
   const hasLoadedData = useRef(false);
   const inactivityTimeoutRef = useRef(null);
@@ -173,6 +179,7 @@ export default function App() {
           goals,
           investment,
         });
+        setLastSavedAt(new Date());
         setSaveStatus("Saved automatically.");
         setTimeout(() => setSaveStatus(""), 3000);
       } catch (err) {
@@ -187,6 +194,7 @@ export default function App() {
   const handleAuth = async (event) => {
     event.preventDefault();
     setAuthError("");
+    setIsAuthenticating(true);
     try {
       const authenticate = authMode === "login" ? login : register;
       await authenticate(credentials);
@@ -194,6 +202,8 @@ export default function App() {
       setCredentials({ username: "", password: "" });
     } catch (err) {
       setAuthError(getAuthErrorMessage(err, "Authentication failed."));
+    } finally {
+      setIsAuthenticating(false);
     }
   };
 
@@ -236,7 +246,11 @@ export default function App() {
           />
           {authError && <p className="text-sm text-rose-400">{authError}</p>}
           <button className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-semibold py-2 rounded">
-            {authMode === "login" ? "Sign In" : "Register"}
+            {isAuthenticating
+              ? "Connecting..."
+              : authMode === "login"
+                ? "Sign In"
+                : "Register"}
           </button>
           {authMode === "login" && (
             <button
@@ -288,6 +302,7 @@ export default function App() {
         goals,
         investment,
       });
+      setLastSavedAt(new Date());
       setSaveStatus("Saved successfully!");
       setTimeout(() => setSaveStatus(""), 3000);
     } catch (err) {
@@ -298,7 +313,16 @@ export default function App() {
     }
   };
 
+  const handleLoadDemoData = () => {
+    setMonthlyIncome(DEFAULT_MONTHLY_INCOME);
+    setExpenses(DEFAULT_EXPENSES.map((expense) => ({ ...expense })));
+    setGoals(DEFAULT_GOALS.map((goal) => ({ ...goal })));
+    setInvestment({ ...DEFAULT_INVESTMENT });
+    setSaveStatus("Demo scenario loaded. Saving...");
+  };
+
   const dashboardSummary = calculateBudgetSummary(monthlyIncome, expenses);
+  const financialHealth = calculateFinancialHealth(dashboardSummary);
   const sessionMinutes = Math.floor(sessionCountdown / 60);
   const sessionSeconds = sessionCountdown % 60;
   const isSessionWarning = sessionCountdown > 0 && sessionCountdown <= 60;
@@ -319,12 +343,21 @@ export default function App() {
               PetroTech Financial Dashboard
             </h1>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             {saveStatus && (
               <span
                 className={`text-sm ${saveStatus.includes("Failed") ? "text-red-400" : "text-emerald-400"}`}
               >
                 {saveStatus}
+              </span>
+            )}
+            {lastSavedAt && (
+              <span className="text-xs text-slate-400">
+                Last saved{" "}
+                {lastSavedAt.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
               </span>
             )}
             {sessionCountdown > 0 && (
@@ -346,6 +379,13 @@ export default function App() {
               Sign out
             </button>
             <button
+              onClick={handleLoadDemoData}
+              className="inline-flex items-center gap-2 rounded-xl border border-sky-400/40 px-4 py-3 text-sm font-semibold text-sky-200 transition hover:border-sky-300 hover:bg-sky-400/10"
+            >
+              <Sparkles className="h-4 w-4" />
+              Load demo data
+            </button>
+            <button
               onClick={handleSaveDashboard}
               disabled={isSaving}
               className="bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-white font-semibold px-6 py-3 rounded-xl transition shadow-lg shadow-emerald-500/20 disabled:opacity-50"
@@ -355,7 +395,7 @@ export default function App() {
           </div>
         </header>
 
-        <section className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="rounded-2xl border border-slate-700 bg-slate-800 p-4">
             <p className="text-xs uppercase tracking-[0.2em] text-slate-400">
               Income
@@ -386,6 +426,17 @@ export default function App() {
             </p>
             <p className="mt-2 text-2xl font-bold text-violet-400">
               ${dashboardSummary.targetSavings.toLocaleString()}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+            <p className="text-xs uppercase tracking-[0.2em] text-emerald-300">
+              Health score
+            </p>
+            <p className="mt-2 text-2xl font-bold text-emerald-300">
+              {financialHealth.score}/100
+            </p>
+            <p className="mt-1 text-xs text-slate-300">
+              {financialHealth.label}
             </p>
           </div>
         </section>
